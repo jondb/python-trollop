@@ -42,14 +42,27 @@ class TrelloConnection(object):
             # TODO: confirm that Trello never returns a 201, for example, when
             # creating a new object. If it does, then we shouldn't restrict
             # ourselves to a 200 here.
-            raise TrelloError(response.text)
+            raise TrelloError(response.text + url + str(response.headers) + str(response.status_code))
         return response.text
 
     def get(self, path, params=None):
         return self.request('GET', path, params)
 
     def post(self, path, params=None, body=None):
-        return self.request('POST', path, params, body)
+        if not path.startswith('/'):
+            path = '/' + path
+        url = 'https://api.trello.com/1' + path
+
+        params = params or {}
+        params.update({'key': self.key, 'token': self.token})
+        body=json.dumps(params)
+        response = self.session.request('POST', url, data=body, headers=self.headers)
+        if response.status_code != 200:
+            # TODO: confirm that Trello never returns a 201, for example, when
+            # creating a new object. If it does, then we shouldn't restrict
+            # ourselves to a 200 here.
+            raise TrelloError(response.text + url + str(response.headers) + str(response.status_code))
+        return response.text
 
     def put(self, path, params=None, body=None):
         return self.request('PUT', path, params, body)
@@ -95,6 +108,16 @@ class Closable(object):
         path = self._prefix + self._id + '/closed'
         params = {'value': 'true'}
         result = self._conn.put(path, params=params)
+
+
+class Commentable(object):
+    """
+    Mixin for Trello objects which are allowed to add comments.
+    """
+    def comment(self, comment):
+        path = self._prefix + self._id + '/actions/comments'
+        params = {'text': comment}
+        result = self._conn.post(path, params=params)
 
 
 class Deletable(object):
@@ -296,7 +319,7 @@ class Board(LazyTrello, Closable):
     members = SubList('Member')
 
 
-class Card(LazyTrello, Closable, Deletable, Labeled):
+class Card(LazyTrello, Closable, Deletable, Labeled, Commentable):
 
     _prefix = '/cards/'
 
